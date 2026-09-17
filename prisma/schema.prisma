@@ -1,0 +1,97 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Category {
+  id    Int    @id @default(autoincrement())
+  name  String @unique
+  image String
+}
+
+model Product {
+  id          Int    @id @default(autoincrement())
+  name        String
+  category    String
+  brand       String  @default("")
+  price       Int
+  salePrice   Int
+  image       String
+  image2      String  @default("")
+  image3      String  @default("")
+  sizeOptions String  @default("")
+  stock       Int
+  description String @db.Text
+}
+
+model Coupon {
+  id       Int       @id @default(autoincrement())
+  code     String    @unique
+  type     String
+  value    Int
+  minOrder Int       @default(0)
+  active   Boolean   @default(true)
+  expiry   DateTime?
+}
+
+model Banner {
+  id         Int     @id @default(1)
+  active     Boolean @default(false)
+  title      String  @default("")
+  subtitle   String  @default("")
+  image      String  @default("")
+  buttonText String  @default("Shop Now")
+  buttonLink String  @default("/shop")
+}
+
+model User {
+  id            Int       @id @default(autoincrement())
+  name          String
+  email         String    @unique
+  phone         String    @default("")
+  passwordHash  String
+  otpCode       String?
+  otpExpiresAt  DateTime?
+  createdAt     DateTime  @default(now())
+  orders        Order[]
+  addresses     Address[]
+}
+
+model Address {
+  id        Int     @id @default(autoincrement())
+  userId    Int
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  label     String  @default("Home")
+  fullName  String
+  phone     String
+  line1     String  @db.Text
+  city      String
+  state     String
+  pincode   String
+  isDefault Boolean @default(false)
+}
+
+model Order {
+  id                Int      @id @default(autoincrement())
+  userId            Int?
+  user              User?    @relation(fields: [userId], references: [id])
+  items             Json
+  customerName      String
+  phone             String
+  address           String   @db.Text
+  email             String   @default("")
+  subtotal          Int
+  couponCode        String   @default("")
+  discount          Int      @default(0)
+  total             Int
+  paymentMethod     String   @default("COD")
+  paymentStatus     String   @default("pending")
+  razorpayOrderId   String?
+  razorpayPaymentId String?
+  status            String   @default("Pending")
+  createdAt         DateTime @default(now())
+}

@@ -1,0 +1,20 @@
+[
+  {
+    "id": 1,
+    "code": "STYLE10",
+    "type": "percent",
+    "value": 10,
+    "minOrder": 499,
+    "active": true,
+    "expiry": "2026-12-31"
+  },
+  {
+    "id": 2,
+    "code": "NEW200",
+    "type": "flat",
+    "value": 200,
+    "minOrder": 1499,
+    "active": true,
+    "expiry": "2026-12-31"
+  }
+]
