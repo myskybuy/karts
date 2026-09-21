@@ -1,9 +1,9 @@
 export const COMPANY = {
   name: "KARTS SOLUTIONS PRIVATE LIMITED",
   brand: "Karts",
-  address: "H-219, Sector 63, Noida, Gautam Buddha Nagar, Uttar Pradesh - 201301",
+  address: "JMD MEGAPOLIS SECTOR 48 Gurugram haryana 122018",
   phone: "+91 92119-81023",
-  email: "hello@karts.in",
+  email: "zealskytechno@gmail.com",
   website: "https://karts.in",
 };
 

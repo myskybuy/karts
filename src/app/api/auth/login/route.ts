@@ -39,7 +39,8 @@ export async function POST(req: NextRequest) {
 
   try {
     await sendLoginOtpEmail(user, otp);
-  } catch {
+  } catch (err) {
+    console.error("[auth] OTP email failed:", err);
     return NextResponse.json({ error: "Could not send OTP email. Please try again." }, { status: 503 });
   }
 

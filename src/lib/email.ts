@@ -1,8 +1,8 @@
 import nodemailer from "nodemailer";
 
 const EMAIL_ENABLED = String(process.env.EMAIL_ENABLED || "false").toLowerCase() === "true";
-const EMAIL_USER = process.env.EMAIL_USER || "";
-const EMAIL_APP_PASSWORD = process.env.EMAIL_APP_PASSWORD || "";
+const EMAIL_USER = (process.env.EMAIL_USER || "").trim();
+const EMAIL_APP_PASSWORD = (process.env.EMAIL_APP_PASSWORD || "").replace(/\s/g, "");
 
 const transporter =
   EMAIL_ENABLED && EMAIL_USER && EMAIL_APP_PASSWORD
