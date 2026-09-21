@@ -1,5 +1,5 @@
 export const COMPANY = {
-  name: "KARTS SOLUTIONS PRIVATE LIMITED",
+  name: "Zeal sky technologies pvt ltd",
   brand: "Karts",
   address: "JMD MEGAPOLIS SECTOR 48 Gurugram haryana 122018",
   phone: "+91 92119-81023",
