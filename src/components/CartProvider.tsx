@@ -1,9 +1,6 @@
 "use client";
 
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
-import { toast } from "sonner";
-
-export const MAX_CART_QTY = 10;
 
 export type CartItem = {
   id: number;
@@ -29,7 +26,7 @@ const CART_KEY = "dharmakart_cart";
 const CartContext = createContext<CartContextValue | null>(null);
 
 function clampQty(n: number) {
-  return Math.min(MAX_CART_QTY, Math.max(1, n));
+  return Math.max(1, Math.floor(n) || 1);
 }
 
 export function CartProvider({ children }: { children: React.ReactNode }) {
@@ -54,14 +51,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   const value = useMemo<CartContextValue>(() => {
     const addToCart = (product: Omit<CartItem, "qty">, qty = 1) => {
       const existing = cart.find((i) => i.id === product.id);
-      const current = existing?.qty || 0;
-      if (current >= MAX_CART_QTY) {
-        toast.error("Maximum 10 pieces per item");
-        return;
-      }
-      const next = current + qty;
-      if (next > MAX_CART_QTY) toast.error("Maximum 10 pieces per item");
-      const finalQty = Math.min(MAX_CART_QTY, next);
+      const finalQty = clampQty((existing?.qty || 0) + qty);
       setCart((prev) => {
         if (prev.some((i) => i.id === product.id)) {
           return prev.map((i) => (i.id === product.id ? { ...i, qty: finalQty } : i));
@@ -72,7 +62,6 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 
     const removeFromCart = (id: number) => setCart((prev) => prev.filter((i) => i.id !== id));
     const updateQty = (id: number, qty: number) => {
-      if (qty > MAX_CART_QTY) toast.error("Maximum 10 pieces per item");
       setCart((prev) => prev.map((i) => (i.id === id ? { ...i, qty: clampQty(qty) } : i)));
     };
     const clearCart = () => setCart([]);

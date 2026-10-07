@@ -3,6 +3,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { sendOrderConfirmationEmail } from "@/lib/email";
 import { isValidEmail, isValidPhone, normalizePhone } from "@/lib/password";
+import { formatDeliveryAddress, validateDeliveryAddress } from "@/lib/india-states";
+import { COMPANY } from "@/lib/policies";
 import { getRazorpay, isRazorpayConfigured } from "@/lib/razorpay";
 import { getSession } from "@/lib/session";
 
@@ -57,18 +59,23 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { items, customerName, phone, address, email, couponCode, discount, paymentMethod } = body;
+    const { items, customerName, phone, email, couponCode, discount, paymentMethod, deliveryAddress } = body;
 
     if (!items || items.length === 0) return NextResponse.json({ error: "Cart is empty" }, { status: 400 });
-    if (!customerName?.trim() || !phone?.trim() || !address?.trim()) {
+    if (!customerName?.trim() || !phone?.trim() || !email?.trim()) {
       return NextResponse.json({ error: "Customer details incomplete" }, { status: 400 });
     }
     if (!isValidPhone(phone)) {
       return NextResponse.json({ error: "Please enter a valid 10-digit Indian mobile number" }, { status: 400 });
     }
-    if (email && !isValidEmail(email)) {
+    if (!isValidEmail(email)) {
       return NextResponse.json({ error: "Please enter a valid email address" }, { status: 400 });
     }
+    const addressError = validateDeliveryAddress(deliveryAddress || {});
+    if (addressError) {
+      return NextResponse.json({ error: addressError }, { status: 400 });
+    }
+    const address = formatDeliveryAddress({ landmark: "", ...deliveryAddress });
 
     const method = paymentMethod === "RAZORPAY" ? "RAZORPAY" : "COD";
 
@@ -85,7 +92,8 @@ export async function POST(req: NextRequest) {
       const rpOrder = await razorpay.orders.create({
         amount: total * 100,
         currency: "INR",
-        receipt: `msb_${Date.now()}`,
+        receipt: `karts_${Date.now()}`,
+        notes: { merchant: COMPANY.name },
       });
 
       const pending = await createOrderRecord(

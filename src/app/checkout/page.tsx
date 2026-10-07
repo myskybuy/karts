@@ -5,27 +5,37 @@ import Script from "next/script";
 import { useEffect, useState } from "react";
 import AuthModal from "@/components/AuthModal";
 import PageLoader from "@/components/PageLoader";
+import ProductImage from "@/components/ProductImage";
 import SiteFooter from "@/components/SiteFooter";
 import SiteHeader from "@/components/SiteHeader";
 import StoreShell from "@/components/StoreShell";
 import { useCart } from "@/components/CartProvider";
+import { INDIA_STATES, DeliveryAddress, matchState, validateDeliveryAddress } from "@/lib/india-states";
+import { COMPANY } from "@/lib/policies";
 import { toast } from "sonner";
 
 declare global {
   interface Window {
-    Razorpay: new (options: Record<string, unknown>) => { open: () => void };
+    Razorpay: new (options: Record<string, unknown>) => { open: () => void; on: (event: string, cb: () => void) => void };
   }
 }
 
 type User = { id: number; name: string; email: string; phone?: string };
 
-function formatSavedAddress(a: {
+type SavedAddress = {
+  isDefault: boolean;
+  fullName?: string;
+  phone?: string;
   line1: string;
   city: string;
   state: string;
   pincode: string;
-}) {
-  return `${a.line1}, ${a.city}, ${a.state} - ${a.pincode}`;
+};
+
+const EMPTY_ADDRESS: DeliveryAddress = { house: "", area: "", landmark: "", city: "", state: "", pincode: "" };
+
+function inr(n: number) {
+  return `₹${n.toLocaleString("en-IN")}`;
 }
 
 export default function CheckoutPage() {
@@ -35,37 +45,47 @@ export default function CheckoutPage() {
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
-  const [address, setAddress] = useState("");
+  const [addr, setAddr] = useState<DeliveryAddress>(EMPTY_ADDRESS);
   const [coupon, setCoupon] = useState("");
   const [couponMsg, setCouponMsg] = useState("");
   const [discount, setDiscount] = useState(0);
   const [appliedCode, setAppliedCode] = useState("");
   const [successId, setSuccessId] = useState<number | null>(null);
-  const [razorpayEnabled, setRazorpayEnabled] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState<"COD" | "RAZORPAY">("COD");
+  const [placing, setPlacing] = useState(false);
+  const razorpayEnabled = !!process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID;
+  const [paymentMethod, setPaymentMethod] = useState<"COD" | "RAZORPAY">(razorpayEnabled ? "RAZORPAY" : "COD");
+
+  function setField(field: keyof DeliveryAddress, value: string) {
+    setAddr((prev) => ({ ...prev, [field]: value }));
+  }
+
+  async function loadUser(u: User) {
+    setUser(u);
+    setName(u.name || "");
+    setEmail(u.email || "");
+    if (u.phone) setPhone(u.phone);
+    const addrs: SavedAddress[] = await fetch("/api/account/addresses").then((r) => r.json());
+    if (Array.isArray(addrs) && addrs.length) {
+      const def = addrs.find((a) => a.isDefault) || addrs[0];
+      if (!u.phone && def.phone) setPhone(def.phone);
+      setAddr({
+        house: def.line1 || "",
+        area: "",
+        landmark: "",
+        city: def.city || "",
+        state: matchState(def.state),
+        pincode: def.pincode || "",
+      });
+    }
+  }
 
   useEffect(() => {
     fetch("/api/auth/me")
       .then((r) => r.json())
       .then(async (d) => {
-        if (d.user) {
-          setUser(d.user);
-          setName(d.user.name || "");
-          setEmail(d.user.email || "");
-          if (d.user.phone) setPhone(d.user.phone);
-          const addrRes = await fetch("/api/account/addresses");
-          const addrs = await addrRes.json();
-          if (Array.isArray(addrs) && addrs.length) {
-            const def = addrs.find((a: { isDefault: boolean }) => a.isDefault) || addrs[0];
-            if (def) {
-              if (!d.user.phone && def.phone) setPhone(def.phone);
-              setAddress(formatSavedAddress(def));
-            }
-          }
-        }
+        if (d.user) await loadUser(d.user);
       })
       .finally(() => setAuthChecked(true));
-    setRazorpayEnabled(!!process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID);
   }, []);
 
   const subtotal = cartTotal;
@@ -91,39 +111,49 @@ export default function CheckoutPage() {
     }
   }
 
-  async function placeOrder() {
-    if (!user) return;
+  async function placeOrder(e: React.FormEvent) {
+    e.preventDefault();
+    if (!user || placing) return;
     if (!cart.length) {
       toast.error("Cart is empty");
       return;
     }
-    if (!name || !phone || !address) {
-      toast.error("Please fill all required fields");
+    if (!name.trim() || !phone.trim() || !email.trim()) {
+      toast.error("Please fill all required contact details");
+      return;
+    }
+    if (!/^[6-9]\d{9}$/.test(phone.replace(/\D/g, "").slice(-10))) {
+      toast.error("Please enter a valid 10-digit mobile number");
+      return;
+    }
+    const addrError = validateDeliveryAddress(addr);
+    if (addrError) {
+      toast.error(addrError);
       return;
     }
     if (paymentMethod === "RAZORPAY" && !razorpayEnabled) {
-      toast.error("Online payment is not configured yet. Choose Cash on Delivery or contact support.");
+      toast.error("Online payment is currently unavailable. Please choose Cash on Delivery.");
       return;
     }
 
-    const payload = {
-      items: cart,
-      customerName: name,
-      phone,
-      address,
-      email,
-      couponCode: appliedCode,
-      discount,
-      paymentMethod,
-    };
-
+    setPlacing(true);
     const res = await fetch("/api/orders", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
+      body: JSON.stringify({
+        items: cart,
+        customerName: name,
+        phone,
+        email,
+        deliveryAddress: addr,
+        couponCode: appliedCode,
+        discount,
+        paymentMethod,
+      }),
     });
     const data = await res.json();
     if (!res.ok) {
+      setPlacing(false);
       toast.error(data.error || "Order failed");
       return;
     }
@@ -133,8 +163,8 @@ export default function CheckoutPage() {
         key: data.key,
         amount: data.amount * 100,
         currency: "INR",
-        name: "Karts",
-        description: `Order #${data.orderId}`,
+        name: COMPANY.name,
+        description: `${COMPANY.brand} order #${data.orderId}`,
         order_id: data.razorpayOrderId,
         handler: async (response: { razorpay_order_id: string; razorpay_payment_id: string; razorpay_signature: string }) => {
           const verify = await fetch("/api/orders", {
@@ -148,6 +178,7 @@ export default function CheckoutPage() {
             }),
           });
           const verifyData = await verify.json();
+          setPlacing(false);
           if (verify.ok) {
             clearCart();
             setSuccessId(verifyData.orderId);
@@ -155,13 +186,16 @@ export default function CheckoutPage() {
             toast.error(verifyData.error || "Payment verification failed");
           }
         },
-        prefill: { name, email, contact: phone },
-        theme: { color: "#0d5c53" },
+        modal: { ondismiss: () => setPlacing(false) },
+        prefill: { name, email, contact: `+91${phone.replace(/\D/g, "").slice(-10)}` },
+        notes: { merchant: COMPANY.name },
+        theme: { color: "#0b40e0" },
       });
       rzp.open();
       return;
     }
 
+    setPlacing(false);
     clearCart();
     setSuccessId(data.orderId);
   }
@@ -171,7 +205,7 @@ export default function CheckoutPage() {
       <StoreShell>
         <SiteHeader showSearch={false} />
         <div className="cart-page" style={{ textAlign: "center", padding: "40px 0" }}>
-          <h2 style={{ color: "var(--color-primary)" }}>Your order is successfully completed</h2>
+          <h2 style={{ color: "var(--color-primary)", justifyContent: "center" }}>Your order is successfully completed</h2>
           <p>
             Your order id is <strong>{successId}</strong>. We&apos;ve emailed you a confirmation.
           </p>
@@ -192,99 +226,175 @@ export default function CheckoutPage() {
         open={showAuthModal}
         title="Login to checkout"
         message="You must be logged in before placing an order. Sign in or create an account below."
-        onSuccess={async (u) => {
-          setUser(u);
-          setName(u.name || "");
-          setEmail(u.email || "");
-          if (u.phone) setPhone(u.phone);
-          const addrs = await fetch("/api/account/addresses").then((r) => r.json());
-          if (Array.isArray(addrs) && addrs.length) {
-            const def = addrs.find((a: { isDefault: boolean }) => a.isDefault) || addrs[0];
-            if (def) {
-              if (!u.phone && def.phone) setPhone(def.phone);
-              setAddress(formatSavedAddress(def));
-            }
-          }
-        }}
+        onSuccess={loadUser}
       />
 
       <div className={`cart-page ${showAuthModal ? "checkout-locked" : ""}`}>
         <h2>Checkout</h2>
-        <p style={{ color: "var(--color-muted)" }}>
-          Cash on Delivery or online payment. Order confirmation will be emailed to you.
-        </p>
 
         {!cart.length ? (
           <p>
             Cart empty. <Link href="/shop">Shop now →</Link>
           </p>
         ) : user ? (
-          <>
-            <div className="form-group">
-              <label>Full name</label>
-              <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="Your name" />
-            </div>
-            <div className="form-group">
-              <label>Phone number</label>
-              <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="10-digit mobile number" />
-            </div>
-            <div className="form-group">
-              <label>Email (order confirmation yahan aayega)</label>
-              <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" />
-            </div>
-            <div className="form-group">
-              <label>Delivery address</label>
-              <textarea value={address} rows={3} onChange={(e) => setAddress(e.target.value)} placeholder="House no, street, city, state, pincode" />
+          <form className="cart-layout checkout-layout" onSubmit={placeOrder} noValidate>
+            <div className="checkout-main">
+              <section className="checkout-section">
+                <h3>
+                  <span className="checkout-step">1</span> Contact details
+                </h3>
+                <div className="checkout-grid">
+                  <div className="form-group">
+                    <label>
+                      Full name <span className="req">*</span>
+                    </label>
+                    <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="Your full name" required autoComplete="name" />
+                  </div>
+                  <div className="form-group">
+                    <label>
+                      Mobile number <span className="req">*</span>
+                    </label>
+                    <input type="tel" inputMode="numeric" maxLength={10} value={phone} onChange={(e) => setPhone(e.target.value.replace(/\D/g, ""))} placeholder="10-digit mobile number" required autoComplete="tel-national" />
+                  </div>
+                  <div className="form-group checkout-span-2">
+                    <label>
+                      Email <span className="req">*</span>
+                    </label>
+                    <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Order confirmation will be sent here" required autoComplete="email" />
+                  </div>
+                </div>
+              </section>
+
+              <section className="checkout-section">
+                <h3>
+                  <span className="checkout-step">2</span> Delivery address
+                </h3>
+                <div className="checkout-grid">
+                  <div className="form-group checkout-span-2">
+                    <label>
+                      House / Flat / Building <span className="req">*</span>
+                    </label>
+                    <input type="text" value={addr.house} onChange={(e) => setField("house", e.target.value)} placeholder="e.g. Flat 12B, Sunrise Apartments" required autoComplete="address-line1" />
+                  </div>
+                  <div className="form-group checkout-span-2">
+                    <label>
+                      Area / Street / Locality <span className="req">*</span>
+                    </label>
+                    <input type="text" value={addr.area} onChange={(e) => setField("area", e.target.value)} placeholder="e.g. MG Road, Sector 14" required autoComplete="address-line2" />
+                  </div>
+                  <div className="form-group checkout-span-2">
+                    <label>Landmark (optional)</label>
+                    <input type="text" value={addr.landmark} onChange={(e) => setField("landmark", e.target.value)} placeholder="e.g. Near City Mall" />
+                  </div>
+                  <div className="form-group">
+                    <label>
+                      City / District <span className="req">*</span>
+                    </label>
+                    <input type="text" value={addr.city} onChange={(e) => setField("city", e.target.value)} placeholder="City" required autoComplete="address-level2" />
+                  </div>
+                  <div className="form-group">
+                    <label>
+                      Pincode <span className="req">*</span>
+                    </label>
+                    <input type="text" inputMode="numeric" maxLength={6} value={addr.pincode} onChange={(e) => setField("pincode", e.target.value.replace(/\D/g, ""))} placeholder="6-digit pincode" required autoComplete="postal-code" />
+                  </div>
+                  <div className="form-group checkout-span-2">
+                    <label>
+                      State <span className="req">*</span>
+                    </label>
+                    <select value={addr.state} onChange={(e) => setField("state", e.target.value)} required autoComplete="address-level1">
+                      <option value="">Select state</option>
+                      {INDIA_STATES.map((s) => (
+                        <option key={s} value={s}>
+                          {s}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </section>
+
+              <section className="checkout-section">
+                <h3>
+                  <span className="checkout-step">3</span> Payment method
+                </h3>
+                <div className="payment-options">
+                  <label className={`payment-option ${paymentMethod === "RAZORPAY" ? "active" : ""} ${razorpayEnabled ? "" : "disabled"}`}>
+                    <input type="radio" name="pay" checked={paymentMethod === "RAZORPAY"} disabled={!razorpayEnabled} onChange={() => setPaymentMethod("RAZORPAY")} />
+                    <span>
+                      <strong>Pay Online</strong>
+                      <small>
+                        {razorpayEnabled
+                          ? "UPI, Debit / Credit Card, Netbanking & Wallets — secured by Razorpay"
+                          : "UPI, Cards, Netbanking & Wallets — currently unavailable"}
+                      </small>
+                    </span>
+                  </label>
+                  <label className={`payment-option ${paymentMethod === "COD" ? "active" : ""}`}>
+                    <input type="radio" name="pay" checked={paymentMethod === "COD"} onChange={() => setPaymentMethod("COD")} />
+                    <span>
+                      <strong>Cash on Delivery</strong>
+                      <small>Pay in cash when your order arrives</small>
+                    </span>
+                  </label>
+                </div>
+                <p className="checkout-legal">
+                  Payments are collected by <strong>{COMPANY.name}</strong>, the company operating {COMPANY.brand}.
+                </p>
+              </section>
             </div>
 
-            <div className="cart-summary" style={{ marginBottom: 16 }}>
-              <label style={{ display: "block", fontSize: 13.5, fontWeight: 600, marginBottom: 8 }}>Have a coupon code?</label>
-              <div style={{ display: "flex", gap: 8 }}>
-                <input
-                  type="text"
-                  value={coupon}
-                  onChange={(e) => setCoupon(e.target.value.toUpperCase())}
-                  placeholder="Enter coupon code"
-                  style={{ flex: 1, padding: "11px 14px", border: "1px solid var(--color-border)", borderRadius: 8, textTransform: "uppercase" }}
-                />
-                <button className="btn btn-outline" style={{ border: "1px solid var(--color-primary)", color: "var(--color-primary)", whiteSpace: "nowrap" }} onClick={applyCoupon}>
+            <aside className="cart-summary-card">
+              <h3>Order summary</h3>
+              <ul className="checkout-items">
+                {cart.map((item) => (
+                  <li key={item.id}>
+                    <ProductImage src={item.image} alt={item.name} />
+                    <span className="checkout-item-info">
+                      <span className="checkout-item-name">{item.name}</span>
+                      <small>Qty {item.qty}</small>
+                    </span>
+                    <span>{inr(item.salePrice * item.qty)}</span>
+                  </li>
+                ))}
+              </ul>
+
+              <label className="checkout-coupon-label">Have a coupon code?</label>
+              <div className="checkout-coupon">
+                <input type="text" value={coupon} onChange={(e) => setCoupon(e.target.value.toUpperCase())} placeholder="Enter coupon code" />
+                <button type="button" className="btn btn-outline" onClick={applyCoupon}>
                   Apply
                 </button>
               </div>
-              {couponMsg ? <p style={{ fontSize: 13, margin: "8px 0 0" }}>{couponMsg}</p> : null}
-            </div>
+              {couponMsg ? <p className="checkout-coupon-msg">{couponMsg}</p> : null}
 
-            <div className="cart-summary">
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, marginBottom: 8 }}>
+              <div className="cart-summary-row">
                 <span>Subtotal</span>
-                <span>₹{subtotal}</span>
+                <span>{inr(subtotal)}</span>
               </div>
               {discount > 0 ? (
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, marginBottom: 8, color: "var(--color-sale)" }}>
+                <div className="cart-summary-row" style={{ color: "var(--color-sale)" }}>
                   <span>Coupon discount</span>
-                  <span>-₹{discount}</span>
+                  <span>-{inr(discount)}</span>
                 </div>
               ) : null}
-              <div style={{ display: "flex", justifyContent: "space-between", fontWeight: 700, fontSize: 17, marginBottom: 10, borderTop: "1px solid var(--color-border)", paddingTop: 10 }}>
+              <div className="cart-summary-row">
+                <span>Shipping</span>
+                <span>Free</span>
+              </div>
+              <div className="cart-summary-row cart-summary-total">
                 <span>Total</span>
-                <span>₹{total}</span>
+                <span>{inr(total)}</span>
               </div>
-              <div className="payment-options">
-                <div className="payment-options-title">Payment method</div>
-                <label className="payment-option">
-                  <input type="radio" name="pay" checked readOnly />
-                  <span>
-                    <strong>Cash on Delivery</strong>
-                    <small>Pay when your order arrives</small>
-                  </span>
-                </label>
-              </div>
-            </div>
-
-            <button className="btn btn-accent" style={{ marginTop: 20, width: "100%" }} onClick={placeOrder}>
-              Place order (COD)
-            </button>
-          </>
+              <button type="submit" className="btn btn-accent cart-checkout-btn" disabled={placing}>
+                {placing ? "Processing…" : paymentMethod === "RAZORPAY" ? `Pay ${inr(total)}` : "Place order (Cash on Delivery)"}
+              </button>
+              <p className="checkout-terms">
+                By placing this order you agree to our <Link href="/terms-of-use">Terms</Link>,{" "}
+                <Link href="/refund-policy">Refund</Link> and <Link href="/privacy-policy">Privacy</Link> policies.
+              </p>
+            </aside>
+          </form>
         ) : authChecked ? (
           <p style={{ color: "var(--color-muted)" }}>Complete login in the popup above to continue checkout.</p>
         ) : (

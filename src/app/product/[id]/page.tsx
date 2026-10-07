@@ -9,7 +9,7 @@ import ProductImage from "@/components/ProductImage";
 import SiteFooter from "@/components/SiteFooter";
 import SiteHeader from "@/components/SiteHeader";
 import StoreShell from "@/components/StoreShell";
-import { MAX_CART_QTY, useCart } from "@/components/CartProvider";
+import { useCart } from "@/components/CartProvider";
 import { useWishlist } from "@/components/WishlistProvider";
 import WishButton from "@/components/WishButton";
 import PageLoader from "@/components/PageLoader";
@@ -74,10 +74,10 @@ export default function ProductPage() {
   const btnLabel = feedback === "added" ? "Added to cart" : inCart ? "Add more" : "Add to cart";
   const gallery = [product.image, product.image2, product.image3].filter(Boolean) as string[];
   const sizes = (product.sizeOptions || "").split(",").map((s) => s.trim()).filter(Boolean);
-  const maxQty = Math.min(MAX_CART_QTY, product.stock > 0 ? product.stock : MAX_CART_QTY);
+  const maxQty = product.stock > 0 ? product.stock : Infinity;
   const inCartQty = cart.find((i) => i.id === product.id)?.qty || 0;
   const copy = getPdpCopy(product);
-  const specRows = [...copy.specs, { label: "Max quantity", value: `${maxQty} per item` }];
+  const specRows = copy.specs;
   const sizeChart = getSizeChart(product);
 
   function toggleAcc(id: AccordionId) {
@@ -133,9 +133,8 @@ export default function ProductPage() {
               {discount > 0 ? <span className="price-discount">{discount}% off</span> : null}
             </div>
             <div className="pdp-chips">
-              <span>Cash on Delivery</span>
+              <span>Online payment &amp; COD</span>
               <span>7-day returns</span>
-              <span>Max {maxQty} per order</span>
             </div>
 
             {sizes.length || sizeChart ? (
@@ -211,8 +210,7 @@ export default function ProductPage() {
                 </button>
               </div>
               <small className="pdp-qty-hint">
-                {inCartQty ? `${inCartQty} already in cart · ` : null}
-                Up to {maxQty} pieces
+                {inCartQty ? `${inCartQty} already in cart` : null}
               </small>
             </div>
 

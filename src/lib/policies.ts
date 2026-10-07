@@ -1,7 +1,7 @@
 export const COMPANY = {
-  name: "Zeal sky technologies pvt ltd",
+  name: "ZEALSKY TECHNOLOGIES PRIVATE LIMITED",
   brand: "Karts",
-  address: "JMD MEGAPOLIS SECTOR 48 Gurugram haryana 122018",
+  address: "Unit No. 948, 9th Floor, JMD Megapolis, Sector 48, Gurugram, Haryana – 122018, India",
   phone: "+91 92119-81023",
   email: "zealskytechno@gmail.com",
   website: "https://karts.in",
@@ -56,7 +56,7 @@ export const policies: Record<string, PolicyContent> = {
       },
       {
         heading: "7. Company details",
-        body: `Returns are handled by ${COMPANY.name}, ${COMPANY.address}. For any dispute relating to returns, Indian law applies and courts at Surat, Gujarat shall have jurisdiction.`,
+        body: `Returns are handled by ${COMPANY.name}, ${COMPANY.address}. For any dispute relating to returns, Indian law applies and courts at Gurugram, Haryana shall have jurisdiction.`,
       },
     ],
   },
@@ -261,7 +261,7 @@ export const policies: Record<string, PolicyContent> = {
       },
       {
         heading: "5. Payments",
-        body: "We accept Cash on Delivery (where available) and online payments via supported gateways (UPI, cards, netbanking). Online payment processing is handled by third-party providers; we do not store full card details on our servers.",
+        body: `We accept online payments (UPI, debit/credit cards, netbanking and wallets via Razorpay) and Cash on Delivery (where available). All payments are collected by ${COMPANY.name}, the legal entity operating ${COMPANY.brand}. Online payment processing is handled by third-party payment gateways; we do not store full card details on our servers.`,
       },
       {
         heading: "6. User accounts",
@@ -285,7 +285,7 @@ export const policies: Record<string, PolicyContent> = {
       },
       {
         heading: "11. Governing law & jurisdiction",
-        body: "These Terms are governed by the laws of India. Exclusive jurisdiction lies with the competent courts at Surat, Gujarat, without prejudice to any rights you may have under applicable consumer protection laws.",
+        body: "These Terms are governed by the laws of India. Exclusive jurisdiction lies with the competent courts at Gurugram, Haryana, without prejudice to any rights you may have under applicable consumer protection laws.",
       },
       {
         heading: "12. Changes to Terms",

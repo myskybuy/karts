@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import ProductCard, { Product } from "@/components/ProductCard";
 import SiteFooter from "@/components/SiteFooter";
@@ -13,6 +13,9 @@ function ShopContent() {
   const category = searchParams.get("category");
   const saleOnly = searchParams.get("sale");
   const q = searchParams.get("q");
+  const sort = searchParams.get("sort") || "relevance";
+  const router = useRouter();
+  const pathname = usePathname();
 
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Array<{ id: number; name: string }>>([]);
@@ -28,10 +31,19 @@ function ShopContent() {
     if (category) params.set("category", category);
     if (saleOnly) params.set("sale", "1");
     if (q) params.set("q", q);
+    if (sort !== "relevance") params.set("sort", sort);
     fetch(`/api/products?${params}`)
       .then((r) => r.json())
       .then(setProducts);
-  }, [category, saleOnly, q]);
+  }, [category, saleOnly, q, sort]);
+
+  function changeSort(value: string) {
+    const params = new URLSearchParams(searchParams.toString());
+    if (value === "relevance") params.delete("sort");
+    else params.set("sort", value);
+    const qs = params.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+  }
 
   let eyebrow = "All products";
   let title = "Everything at Karts";
@@ -58,6 +70,14 @@ function ShopContent() {
               </div>
               <h2 id="page-title">{title}</h2>
             </div>
+            <label className="sort-select">
+              <span>Sort by</span>
+              <select value={sort} onChange={(e) => changeSort(e.target.value)}>
+                <option value="relevance">Relevance</option>
+                <option value="price_asc">Price: Low to High</option>
+                <option value="price_desc">Price: High to Low</option>
+              </select>
+            </label>
           </div>
           <div className="chips" style={{ marginBottom: 26 }}>
             <Link className="chip" href="/shop">

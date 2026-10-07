@@ -1,12 +1,15 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "./db";
 
+export type ProductSort = "relevance" | "price_asc" | "price_desc";
+
 export type ProductFilters = {
   category?: string;
   sale?: boolean;
   q?: string;
   excludeId?: number;
   limit?: number;
+  sort?: ProductSort;
 };
 
 export async function listProducts(filters: ProductFilters = {}) {
@@ -27,7 +30,12 @@ export async function listProducts(filters: ProductFilters = {}) {
 
   let products = await prisma.product.findMany({
     where,
-    orderBy: { id: "asc" },
+    orderBy:
+      filters.sort === "price_asc"
+        ? [{ salePrice: "asc" }, { id: "asc" }]
+        : filters.sort === "price_desc"
+          ? [{ salePrice: "desc" }, { id: "asc" }]
+          : { id: "asc" },
     take: filters.sale ? undefined : filters.limit,
   });
 
