@@ -117,7 +117,7 @@ export async function POST(req: NextRequest) {
         orderId: pending.id,
         razorpayOrderId: rpOrder.id,
         amount: total,
-        key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
+        key: process.env.RAZORPAY_KEY_ID,
       });
     }
 
@@ -146,7 +146,8 @@ export async function POST(req: NextRequest) {
     });
 
     return NextResponse.json({ success: true, orderId: order.id });
-  } catch {
+  } catch (err) {
+    console.error("[orders] place order failed:", err);
     return NextResponse.json({ error: "Unable to place order. Please try again." }, { status: 500 });
   }
 }
@@ -200,7 +201,8 @@ export async function PUT(req: NextRequest) {
     });
 
     return NextResponse.json({ success: true, orderId: updated.id });
-  } catch {
+  } catch (err) {
+    console.error("[orders] payment verification failed:", err);
     return NextResponse.json({ error: "Payment verification failed. Please contact support." }, { status: 500 });
   }
 }
