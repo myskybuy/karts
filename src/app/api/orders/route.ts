@@ -46,7 +46,7 @@ async function createOrderRecord(
       paymentStatus: body.paymentStatus || "pending",
       razorpayOrderId: body.razorpayOrderId || null,
       razorpayPaymentId: body.razorpayPaymentId || null,
-      status: body.paymentMethod === "RAZORPAY" ? "Confirmed" : "Pending",
+      status: "Pending",
     },
   });
 }
