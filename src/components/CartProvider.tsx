@@ -48,6 +48,22 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     localStorage.setItem(CART_KEY, JSON.stringify(cart));
   }, [cart, hydrated]);
 
+  useEffect(() => {
+    if (!hydrated) return;
+    const ids = cart.map((i) => i.id);
+    if (!ids.length) return;
+    fetch(`/api/products?ids=${ids.join(",")}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((list: Array<{ id: number }> | null) => {
+        if (!Array.isArray(list)) return;
+        const available = new Set(list.map((p) => p.id));
+        setCart((prev) => (prev.every((i) => available.has(i.id)) ? prev : prev.filter((i) => available.has(i.id))));
+      })
+      .catch(() => {});
+    // Only re-check when the cart is first loaded.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hydrated]);
+
   const value = useMemo<CartContextValue>(() => {
     const addToCart = (product: Omit<CartItem, "qty">, qty = 1) => {
       const existing = cart.find((i) => i.id === product.id);

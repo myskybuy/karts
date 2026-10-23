@@ -29,8 +29,8 @@ const offers = [
   },
   {
     n: "04",
-    title: "Jewellery & Accessories",
-    text: "Necklaces, earrings, bracelets, belts and eyewear to complete every outfit.",
+    title: "Accessories",
+    text: "Belts, eyewear and other accessories to complete every outfit.",
   },
   {
     n: "05",
@@ -69,7 +69,7 @@ export default function AboutPage() {
             <h1>Fashion, footwear &amp; accessories, done properly.</h1>
             <p className="about-lead">
               Karts is an Indian ecommerce store operated by <strong>{COMPANY.name}</strong>. We help
-              customers discover and purchase footwear, clothing, bags, jewellery and accessories through
+              customers discover and purchase footwear, clothing, bags and accessories through
               a clear, secure and convenient online shopping experience.
             </p>
             <Link href="/shop" className="btn btn-accent">

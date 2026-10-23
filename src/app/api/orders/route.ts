@@ -1,6 +1,7 @@
 import crypto from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { isHiddenCategory } from "@/lib/hidden-categories";
 import { sendOrderConfirmationEmail } from "@/lib/email";
 import { isValidEmail, isValidPhone, normalizePhone } from "@/lib/password";
 import { formatDeliveryAddress, validateDeliveryAddress } from "@/lib/india-states";
@@ -62,6 +63,12 @@ export async function POST(req: NextRequest) {
     const { items, customerName, phone, email, couponCode, discount, paymentMethod, deliveryAddress } = body;
 
     if (!items || items.length === 0) return NextResponse.json({ error: "Cart is empty" }, { status: 400 });
+    const ids = (items as OrderItem[]).map((i) => Number(i.id));
+    const found = await prisma.product.findMany({ where: { id: { in: ids } }, select: { id: true, category: true } });
+    const available = new Set(found.filter((p) => !isHiddenCategory(p.category)).map((p) => p.id));
+    if (!ids.every((id) => available.has(id))) {
+      return NextResponse.json({ error: "Some items in your cart are no longer available" }, { status: 400 });
+    }
     if (!customerName?.trim() || !phone?.trim() || !email?.trim()) {
       return NextResponse.json({ error: "Customer details incomplete" }, { status: 400 });
     }

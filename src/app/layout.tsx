@@ -7,7 +7,7 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "Karts — Fashion, Footwear & Accessories",
   description:
-    "Your one-stop shop for fashion, footwear & accessories — men's & women's clothing, shoes, bags, jewellery and more, with INR pricing and Cash on Delivery.",
+    "Your one-stop shop for fashion, footwear & accessories — men's & women's clothing, shoes, bags and more, with INR pricing and Cash on Delivery.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
