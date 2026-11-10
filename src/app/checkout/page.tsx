@@ -52,8 +52,21 @@ export default function CheckoutPage() {
   const [appliedCode, setAppliedCode] = useState("");
   const [successId, setSuccessId] = useState<number | null>(null);
   const [placing, setPlacing] = useState(false);
-  const razorpayEnabled = !!process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID;
-  const [paymentMethod, setPaymentMethod] = useState<"COD" | "RAZORPAY">(razorpayEnabled ? "RAZORPAY" : "COD");
+  const [razorpayEnabled, setRazorpayEnabled] = useState(false);
+  const [phonepeEnabled, setPhonepeEnabled] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState<"COD" | "RAZORPAY" | "PHONEPE">("COD");
+
+  useEffect(() => {
+    fetch("/api/payment-options")
+      .then((r) => r.json())
+      .then((o: { phonepe: boolean; razorpay: boolean }) => {
+        setPhonepeEnabled(o.phonepe);
+        setRazorpayEnabled(o.razorpay);
+        if (o.phonepe) setPaymentMethod("PHONEPE");
+        else if (o.razorpay) setPaymentMethod("RAZORPAY");
+      })
+      .catch(() => {});
+  }, []);
 
   function setField(field: keyof DeliveryAddress, value: string) {
     setAddr((prev) => ({ ...prev, [field]: value }));
@@ -131,7 +144,7 @@ export default function CheckoutPage() {
       toast.error(addrError);
       return;
     }
-    if (paymentMethod === "RAZORPAY" && !razorpayEnabled) {
+    if ((paymentMethod === "RAZORPAY" && !razorpayEnabled) || (paymentMethod === "PHONEPE" && !phonepeEnabled)) {
       toast.error("Online payment is currently unavailable. Please choose Cash on Delivery.");
       return;
     }
@@ -155,6 +168,17 @@ export default function CheckoutPage() {
     if (!res.ok) {
       setPlacing(false);
       toast.error(data.error || "Order failed");
+      return;
+    }
+
+    if (paymentMethod === "PHONEPE") {
+      if (data.redirectUrl) {
+        // Cart is cleared on /checkout/phonepe only after PhonePe confirms the payment.
+        window.location.href = data.redirectUrl;
+        return;
+      }
+      setPlacing(false);
+      toast.error("Could not start PhonePe payment. Please try again.");
       return;
     }
 
@@ -220,7 +244,7 @@ export default function CheckoutPage() {
 
   return (
     <StoreShell>
-      <Script src="https://checkout.razorpay.com/v1/checkout.js" strategy="lazyOnload" />
+      {razorpayEnabled ? <Script src="https://checkout.razorpay.com/v1/checkout.js" strategy="lazyOnload" /> : null}
       <SiteHeader showSearch={false} />
       <AuthModal
         open={showAuthModal}
@@ -319,17 +343,26 @@ export default function CheckoutPage() {
                   <span className="checkout-step">3</span> Payment method
                 </h3>
                 <div className="payment-options">
-                  <label className={`payment-option ${paymentMethod === "RAZORPAY" ? "active" : ""} ${razorpayEnabled ? "" : "disabled"}`}>
-                    <input type="radio" name="pay" checked={paymentMethod === "RAZORPAY"} disabled={!razorpayEnabled} onChange={() => setPaymentMethod("RAZORPAY")} />
+                  <label className={`payment-option ${paymentMethod === "PHONEPE" ? "active" : ""} ${phonepeEnabled ? "" : "disabled"}`}>
+                    <input type="radio" name="pay" checked={paymentMethod === "PHONEPE"} disabled={!phonepeEnabled} onChange={() => setPaymentMethod("PHONEPE")} />
                     <span>
                       <strong>Pay Online</strong>
                       <small>
-                        {razorpayEnabled
-                          ? "UPI, Debit / Credit Card, Netbanking & Wallets — secured by Razorpay"
+                        {phonepeEnabled
+                          ? "UPI, Debit / Credit Card, Netbanking & Wallets — secured by PhonePe"
                           : "UPI, Cards, Netbanking & Wallets — currently unavailable"}
                       </small>
                     </span>
                   </label>
+                  {razorpayEnabled ? (
+                    <label className={`payment-option ${paymentMethod === "RAZORPAY" ? "active" : ""}`}>
+                      <input type="radio" name="pay" checked={paymentMethod === "RAZORPAY"} onChange={() => setPaymentMethod("RAZORPAY")} />
+                      <span>
+                        <strong>Pay Online (Razorpay)</strong>
+                        <small>UPI, Debit / Credit Card, Netbanking & Wallets — secured by Razorpay</small>
+                      </span>
+                    </label>
+                  ) : null}
                   <label className={`payment-option ${paymentMethod === "COD" ? "active" : ""}`}>
                     <input type="radio" name="pay" checked={paymentMethod === "COD"} onChange={() => setPaymentMethod("COD")} />
                     <span>
@@ -387,7 +420,7 @@ export default function CheckoutPage() {
                 <span>{inr(total)}</span>
               </div>
               <button type="submit" className="btn btn-accent cart-checkout-btn" disabled={placing}>
-                {placing ? "Processing…" : paymentMethod === "RAZORPAY" ? `Pay ${inr(total)}` : "Place order (Cash on Delivery)"}
+                {placing ? "Processing…" : paymentMethod === "COD" ? "Place order (Cash on Delivery)" : `Pay ${inr(total)}`}
               </button>
               <p className="checkout-terms">
                 By placing this order you agree to our <Link href="/terms-of-use">Terms</Link>,{" "}

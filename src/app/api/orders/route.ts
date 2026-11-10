@@ -6,10 +6,45 @@ import { sendOrderConfirmationEmail } from "@/lib/email";
 import { isValidEmail, isValidPhone, normalizePhone } from "@/lib/password";
 import { formatDeliveryAddress, validateDeliveryAddress } from "@/lib/india-states";
 import { COMPANY } from "@/lib/policies";
+import { RAZORPAY_VISIBLE } from "@/lib/payment-options";
+import { createPhonePePayment, isPhonePeConfigured } from "@/lib/phonepe";
 import { getRazorpay, isRazorpayConfigured } from "@/lib/razorpay";
 import { getSession } from "@/lib/session";
 
 type OrderItem = { id: number; name: string; image: string; salePrice: number; qty: number };
+
+/** Rebuilds cart lines from the database so the browser cannot change prices. */
+async function priceFromDb(raw: OrderItem[]) {
+  const ids = raw.map((i) => Number(i.id));
+  const products = await prisma.product.findMany({
+    where: { id: { in: ids } },
+    select: { id: true, name: true, image: true, salePrice: true, category: true },
+  });
+  const byId = new Map(products.filter((p) => !isHiddenCategory(p.category)).map((p) => [p.id, p]));
+  if (!ids.every((id) => byId.has(id))) return null;
+  return raw.map((i) => {
+    const p = byId.get(Number(i.id))!;
+    const qty = Math.min(99, Math.max(1, Math.floor(Number(i.qty) || 1)));
+    return { id: p.id, name: p.name, image: p.image, salePrice: p.salePrice, qty };
+  });
+}
+
+/** Same rules as /api/coupons/validate, applied on the server. */
+async function couponDiscount(code: string | undefined, subtotal: number) {
+  if (!code) return { code: "", discount: 0 };
+  const coupon = await prisma.coupon.findFirst({ where: { code: code.toUpperCase(), active: true } });
+  if (!coupon || (coupon.expiry && coupon.expiry < new Date()) || subtotal < coupon.minOrder) return { code: "", discount: 0 };
+  const discount = coupon.type === "percent" ? Math.round((subtotal * coupon.value) / 100) : coupon.value;
+  return { code: coupon.code, discount: Math.min(discount, subtotal) };
+}
+
+function siteUrl(req: NextRequest) {
+  const fromEnv = process.env.SITE_URL?.replace(/\/+$/, "");
+  if (fromEnv) return fromEnv;
+  const host = req.headers.get("x-forwarded-host") || req.headers.get("host") || req.nextUrl.host;
+  const proto = req.headers.get("x-forwarded-proto") || req.nextUrl.protocol.replace(":", "");
+  return `${proto}://${host}`;
+}
 
 async function createOrderRecord(
   body: {
@@ -60,15 +95,15 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { items, customerName, phone, email, couponCode, discount, paymentMethod, deliveryAddress } = body;
+    const { customerName, phone, email, paymentMethod, deliveryAddress } = body;
 
-    if (!items || items.length === 0) return NextResponse.json({ error: "Cart is empty" }, { status: 400 });
-    const ids = (items as OrderItem[]).map((i) => Number(i.id));
-    const found = await prisma.product.findMany({ where: { id: { in: ids } }, select: { id: true, category: true } });
-    const available = new Set(found.filter((p) => !isHiddenCategory(p.category)).map((p) => p.id));
-    if (!ids.every((id) => available.has(id))) {
+    if (!Array.isArray(body.items) || body.items.length === 0) return NextResponse.json({ error: "Cart is empty" }, { status: 400 });
+    const items = await priceFromDb(body.items as OrderItem[]);
+    if (!items) {
       return NextResponse.json({ error: "Some items in your cart are no longer available" }, { status: 400 });
     }
+    const subtotal = items.reduce((sum, item) => sum + item.salePrice * item.qty, 0);
+    const { code: couponCode, discount } = await couponDiscount(body.couponCode, subtotal);
     if (!customerName?.trim() || !phone?.trim() || !email?.trim()) {
       return NextResponse.json({ error: "Customer details incomplete" }, { status: 400 });
     }
@@ -84,16 +119,43 @@ export async function POST(req: NextRequest) {
     }
     const address = formatDeliveryAddress({ landmark: "", ...deliveryAddress });
 
-    const method = paymentMethod === "RAZORPAY" ? "RAZORPAY" : "COD";
+    const method = paymentMethod === "PHONEPE" ? "PHONEPE" : paymentMethod === "RAZORPAY" ? "RAZORPAY" : "COD";
+    const total = Math.max(0, subtotal - discount);
 
-    if (method === "RAZORPAY") {
-      if (!isRazorpayConfigured()) {
+    if (method === "PHONEPE") {
+      if (!isPhonePeConfigured()) {
         return NextResponse.json({ error: "Online payment is not configured yet" }, { status: 503 });
       }
+      if (total < 1) {
+        return NextResponse.json({ error: "Order total is too low for online payment" }, { status: 400 });
+      }
 
-      const subtotal = items.reduce((sum: number, item: OrderItem) => sum + item.salePrice * item.qty, 0);
-      const appliedDiscount = discount && discount > 0 ? discount : 0;
-      const total = Math.max(0, subtotal - appliedDiscount);
+      const pending = await createOrderRecord(
+        { items, customerName, phone, address, email, couponCode, discount, paymentMethod: "PHONEPE", paymentStatus: "pending" },
+        session.userId
+      );
+      const merchantOrderId = `KARTS_${pending.id}_${Date.now()}`;
+      await prisma.order.update({ where: { id: pending.id }, data: { phonepeOrderId: merchantOrderId } });
+
+      try {
+        const pay = await createPhonePePayment({
+          merchantOrderId,
+          amountRupees: total,
+          orderId: pending.id,
+          redirectUrl: `${siteUrl(req)}/checkout/phonepe?order=${pending.id}`,
+        });
+        return NextResponse.json({ success: true, orderId: pending.id, redirectUrl: pay.redirectUrl });
+      } catch (err) {
+        console.error("[orders] PhonePe payment start failed:", err);
+        await prisma.order.update({ where: { id: pending.id }, data: { paymentStatus: "failed", status: "Cancelled" } });
+        return NextResponse.json({ error: "Could not start PhonePe payment. Please try again." }, { status: 502 });
+      }
+    }
+
+    if (method === "RAZORPAY") {
+      if (!RAZORPAY_VISIBLE || !isRazorpayConfigured()) {
+        return NextResponse.json({ error: "Online payment is not configured yet" }, { status: 503 });
+      }
 
       const razorpay = getRazorpay()!;
       const rpOrder = await razorpay.orders.create({

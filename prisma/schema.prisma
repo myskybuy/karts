@@ -92,6 +92,8 @@ model Order {
   paymentStatus     String   @default("pending")
   razorpayOrderId   String?
   razorpayPaymentId String?
+  phonepeOrderId    String?
+  phonepeTxnId      String?
   status            String   @default("Pending")
   createdAt         DateTime @default(now())
 }

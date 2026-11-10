@@ -76,7 +76,7 @@ export const policies: Record<string, PolicyContent> = {
         ],
       },
       {
-        heading: "2. Online payments (Razorpay — UPI / Card / Netbanking)",
+        heading: "2. Online payments (PhonePe — UPI / Card / Netbanking)",
         body: "For prepaid orders, refunds are credited to the original payment method used at checkout. Once we approve the refund, bank/UPI settlement typically completes within 5–7 business days. Exact timing depends on your bank or UPI app and is outside our direct control after we initiate the refund with the payment gateway.",
       },
       {
@@ -211,7 +211,7 @@ export const policies: Record<string, PolicyContent> = {
         body: "We do not sell your personal information. We may share limited data with:",
         bullets: [
           "Logistics / courier partners — to deliver your order.",
-          "Payment gateways (e.g. Razorpay) — to process online payments securely.",
+          "Payment gateways (e.g. PhonePe) — to process online payments securely.",
           "IT / hosting providers — to operate our website and databases.",
           "Authorities — when required by law or to protect our legal rights.",
         ],
@@ -261,7 +261,7 @@ export const policies: Record<string, PolicyContent> = {
       },
       {
         heading: "5. Payments",
-        body: `We accept online payments (UPI, debit/credit cards, netbanking and wallets via Razorpay) and Cash on Delivery (where available). All payments are collected by ${COMPANY.name}, the legal entity operating ${COMPANY.brand}. Online payment processing is handled by third-party payment gateways; we do not store full card details on our servers.`,
+        body: `We accept online payments (UPI, debit/credit cards, netbanking and wallets via PhonePe) and Cash on Delivery (where available). All payments are collected by ${COMPANY.name}, the legal entity operating ${COMPANY.brand}. Online payment processing is handled by third-party payment gateways; we do not store full card details on our servers.`,
       },
       {
         heading: "6. User accounts",
